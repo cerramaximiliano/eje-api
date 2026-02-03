@@ -13,6 +13,10 @@ const routes = require('./routes');
 
 const app = express();
 
+// Store server reference for graceful shutdown
+let server = null;
+let isShuttingDown = false;
+
 // Environment
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const PORT = process.env.PORT || 3004;
@@ -27,14 +31,13 @@ function configureCors() {
     'http://localhost:4200',
     'https://app.lawanalytics.com.ar',
     'https://admin.lawanalytics.com.ar',
-    'https://lawanalytics.com.ar'
+    'https://lawanalytics.com.ar',
+    'https://dashboard.lawanalytics.app'
   ];
 
   return cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, curl, etc.)
       if (!origin) return callback(null, true);
-
       if (allowedOrigins.includes(origin) || NODE_ENV === 'development') {
         callback(null, true);
       } else {
@@ -56,10 +59,10 @@ async function connectDatabase() {
     : process.env.URLDB;
 
   if (!mongoUri) {
-    throw new Error('MongoDB URI not configured. Set URLDB or URLDB_LOCAL environment variable.');
+    throw new Error('MongoDB URI not configured');
   }
 
-  logger.info({ environment: NODE_ENV }, 'Connecting to MongoDB...');
+  logger.info('Connecting to MongoDB (' + NODE_ENV + ')...');
 
   await mongoose.connect(mongoUri, {
     maxPoolSize: 10,
@@ -69,9 +72,8 @@ async function connectDatabase() {
 
   logger.info('Connected to MongoDB');
 
-  // Handle connection events
   mongoose.connection.on('error', (err) => {
-    logger.error({ error: err.message }, 'MongoDB connection error');
+    logger.error('MongoDB connection error: ' + err.message);
   });
 
   mongoose.connection.on('disconnected', () => {
@@ -87,24 +89,16 @@ async function connectDatabase() {
  * Configure Express middleware
  */
 function configureMiddleware() {
-  // CORS
   app.use(configureCors());
-
-  // Body parsing
   app.use(bodyParser.json({ limit: '10mb' }));
   app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
-
-  // Cookie parsing
   app.use(cookieParser());
 
-  // Request logging
   if (NODE_ENV !== 'production') {
     app.use(morgan('dev'));
   } else {
     app.use(morgan('combined', {
-      stream: {
-        write: (message) => logger.info(message.trim())
-      }
+      stream: { write: (message) => logger.info(message.trim()) }
     }));
   }
 }
@@ -113,15 +107,12 @@ function configureMiddleware() {
  * Configure routes
  */
 function configureRoutes() {
-  // API routes
   app.use('/api', routes);
 
-  // Root endpoint
   app.get('/', (req, res) => {
     res.json({
       name: 'EJE API',
       version: '1.0.0',
-      description: 'API for EJE - Expediente Judicial Electrónico (Poder Judicial de la Ciudad de Buenos Aires)',
       environment: NODE_ENV,
       endpoints: {
         health: '/api/health',
@@ -133,7 +124,6 @@ function configureRoutes() {
     });
   });
 
-  // 404 handler
   app.use((req, res) => {
     res.status(404).json({
       success: false,
@@ -142,20 +132,82 @@ function configureRoutes() {
     });
   });
 
-  // Error handler
   app.use((err, req, res, next) => {
-    logger.error({
-      error: err.message,
-      stack: err.stack,
-      path: req.path,
-      method: req.method
-    }, 'Unhandled error');
-
+    logger.error('Error on ' + req.method + ' ' + req.path + ': ' + err.message);
     res.status(err.status || 500).json({
       success: false,
-      message: err.message || 'Internal server error',
-      ...(NODE_ENV === 'development' && { stack: err.stack })
+      message: err.message || 'Internal server error'
     });
+  });
+}
+
+/**
+ * Graceful shutdown
+ */
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  
+  logger.info(signal + ' received. Shutting down gracefully...');
+  
+  if (server) {
+    await new Promise((resolve) => {
+      server.close((err) => {
+        if (err) {
+          logger.error('Error closing HTTP server: ' + err.message);
+        } else {
+          logger.info('HTTP server closed');
+        }
+        resolve();
+      });
+    });
+  }
+  
+  try {
+    await mongoose.connection.close();
+    logger.info('MongoDB connection closed');
+  } catch (err) {
+    logger.error('Error closing MongoDB: ' + err.message);
+  }
+  
+  process.exit(0);
+}
+
+/**
+ * Try to start listening with retries
+ */
+function startListening(retries = 5, delay = 2000) {
+  return new Promise((resolve, reject) => {
+    const tryStart = (attempt) => {
+      if (isShuttingDown) {
+        return reject(new Error('Shutdown in progress'));
+      }
+      
+      server = app.listen(PORT);
+      
+      server.on('listening', () => {
+        logger.info('EJE API server started on port ' + PORT + ' (' + NODE_ENV + ')');
+        resolve(server);
+      });
+      
+      server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          if (attempt < retries) {
+            logger.warn('Port ' + PORT + ' in use, retrying in ' + (delay/1000) + 's... (attempt ' + (attempt+1) + '/' + retries + ')');
+            server = null;
+            setTimeout(() => tryStart(attempt + 1), delay);
+          } else {
+            logger.error('Port ' + PORT + ' still in use after ' + retries + ' attempts');
+            reject(err);
+          }
+        } else {
+          logger.error('Server error: ' + err.message);
+          reject(err);
+        }
+      });
+    };
+    
+    tryStart(0);
   });
 }
 
@@ -164,62 +216,38 @@ function configureRoutes() {
  */
 async function startServer() {
   try {
-    // Load secrets from AWS if not in development with .env
     if (NODE_ENV !== 'development' || !process.env.URLDB) {
       logger.info('Loading secrets from AWS...');
       await loadSecrets();
     }
 
-    // Connect to database
     await connectDatabase();
-
-    // Configure Express
     configureMiddleware();
     configureRoutes();
 
-    // Clean logs periodically
     cleanLogs();
-    setInterval(cleanLogs, 60 * 60 * 1000); // Every hour
+    setInterval(cleanLogs, 60 * 60 * 1000);
 
-    // Start listening
-    app.listen(PORT, () => {
-      logger.info({
-        port: PORT,
-        environment: NODE_ENV,
-        nodeVersion: process.version
-      }, `EJE API server started on port ${PORT}`);
-    });
+    await startListening();
+    
   } catch (error) {
-    logger.error({ error: error.message, stack: error.stack }, 'Failed to start server');
+    logger.error('Failed to start server: ' + error.message);
     process.exit(1);
   }
 }
 
-// Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
-  logger.error({ error: error.message, stack: error.stack }, 'Uncaught exception');
-  process.exit(1);
+  logger.error('Uncaught exception: ' + error.message);
+  gracefulShutdown('uncaughtException').catch(() => process.exit(1));
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error({ reason, promise }, 'Unhandled promise rejection');
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection: ' + reason);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received. Shutting down gracefully...');
-  await mongoose.connection.close();
-  process.exit(0);
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received. Shutting down gracefully...');
-  await mongoose.connection.close();
-  process.exit(0);
-});
-
-// Start the server
 startServer();
 
 module.exports = app;
