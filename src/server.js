@@ -94,13 +94,12 @@ function configureMiddleware() {
   app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
   app.use(cookieParser());
 
-  if (NODE_ENV !== 'production') {
-    app.use(morgan('dev'));
-  } else {
-    app.use(morgan('combined', {
-      stream: { write: (message) => logger.info(message.trim()) }
-    }));
-  }
+  // Custom morgan format: METHOD /path STATUS - RESPONSEms
+  const morganFormat = ':method :url :status - :response-time[0]ms';
+  app.use(morgan(morganFormat, {
+    stream: { write: (message) => logger.info(message.trim()) },
+    skip: (req) => req.path === '/api/health' // Skip health checks
+  }));
 }
 
 /**
