@@ -53,19 +53,14 @@ const verifyToken = (req, res, next) => {
     req.userId = decoded.userId || decoded._id || decoded.id;
     req.userData = decoded;
 
-    logger.debug({
-      userId: req.userId,
-      path: req.path,
-      method: req.method,
-      timestamp: getArgentinaDate().toISOString()
-    }, 'Token verified');
+    logger.debug('Token verified for user ' + req.userId + ' on ' + req.method + ' ' + req.path);
 
     next();
   } catch (error) {
-    logger.error({ error: error.message, path: req.path }, 'Token verification failed');
+    logger.error('Token verification failed on ' + req.path + ': ' + error.message);
     return res.status(401).json({
       success: false,
-      message: 'Invalid token',
+      message: 'Token verification failed',
       error: error.message
     });
   }
@@ -100,7 +95,7 @@ const verifyAdmin = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    logger.error({ error: error.message, userId: req.userId }, 'Admin verification failed');
+    logger.error('Admin verification failed for user ' + req.userId + ': ' + error.message);
     return res.status(500).json({
       success: false,
       message: 'Error verifying admin status',
@@ -139,15 +134,11 @@ const verifyApiKey = (req, res, next) => {
       });
     }
 
-    logger.debug({
-      path: req.path,
-      method: req.method,
-      timestamp: getArgentinaDate().toISOString()
-    }, 'API key verified');
+    logger.debug('API key verified on ' + req.method + ' ' + req.path);
 
     next();
   } catch (error) {
-    logger.error({ error: error.message, path: req.path }, 'API key verification failed');
+    logger.error('API key verification failed on ' + req.path + ': ' + error.message);
     return res.status(500).json({
       success: false,
       message: 'Error verifying API key',
@@ -164,7 +155,7 @@ const verifyTokenOrApiKey = (req, res, next) => {
   const apiKey = req.headers['x-api-key'] || req.headers['api-key'] || req.query.apiKey || req.body?.apiKey;
 
   if (apiKey && apiKey === process.env.API_KEY) {
-    logger.debug({ path: req.path, method: req.method }, 'Authenticated via API key');
+    logger.debug('Authenticated via API key on ' + req.method + ' ' + req.path);
     return next();
   }
 

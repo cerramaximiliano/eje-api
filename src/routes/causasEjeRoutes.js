@@ -6,8 +6,9 @@ const causasEjeController = require('../controllers/causasEjeController');
 // Public stats (with API key or token)
 router.get('/stats', verifyTokenOrApiKey, causasEjeController.getStats);
 
-// Search and list
+// Search and list (both endpoints for backwards compatibility)
 router.get('/buscar', verifyTokenOrApiKey, causasEjeController.searchCausas);
+router.get('/search', verifyTokenOrApiKey, causasEjeController.searchCausas);
 
 // Find by folder
 router.get('/folder/:folderId', verifyToken, causasEjeController.findByFolderId);
