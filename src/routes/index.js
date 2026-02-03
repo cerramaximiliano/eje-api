@@ -5,6 +5,7 @@ const router = express.Router();
 const causasEjeRoutes = require('./causasEjeRoutes');
 const causasEjeServiceRoutes = require('./causasEjeServiceRoutes');
 const workerStatsRoutes = require('./workerStatsRoutes');
+const configRoutes = require('./configRoutes');
 
 // Health check
 router.get('/health', (req, res) => {
@@ -20,5 +21,6 @@ router.get('/health', (req, res) => {
 router.use('/causas-eje', causasEjeRoutes);
 router.use('/causas-eje-service', causasEjeServiceRoutes);
 router.use('/worker-stats', workerStatsRoutes);
+router.use('/config', configRoutes);
 
 module.exports = router;

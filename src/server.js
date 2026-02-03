@@ -127,7 +127,8 @@ function configureRoutes() {
         health: '/api/health',
         causas: '/api/causas-eje',
         service: '/api/causas-eje-service',
-        stats: '/api/worker-stats'
+        stats: '/api/worker-stats',
+        config: '/api/config'
       }
     });
   });
