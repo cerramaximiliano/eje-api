@@ -43,6 +43,23 @@ router.post('/manager/alerts/:index/acknowledge', verifyToken, verifyAdmin, cont
 // Get daily stats (Admin only)
 router.get('/manager/daily-stats', verifyToken, verifyAdmin, controller.getDailyStats);
 
+// ========== INDIVIDUAL WORKER MANAGEMENT ==========
+
+// Get all workers config and status (Admin only)
+router.get('/manager/workers', verifyToken, verifyAdmin, controller.getAllWorkersConfig);
+
+// Update global manager settings (Admin only)
+router.patch('/manager/settings', verifyToken, verifyAdmin, controller.updateGlobalSettings);
+
+// Get specific worker config (Admin only)
+router.get('/manager/worker/:workerType', verifyToken, verifyAdmin, controller.getWorkerConfig);
+
+// Update specific worker config (Admin only)
+router.patch('/manager/worker/:workerType', verifyToken, verifyAdmin, controller.updateWorkerConfig);
+
+// Toggle specific worker (Admin only)
+router.post('/manager/worker/:workerType/toggle', verifyToken, verifyAdmin, controller.toggleWorker);
+
 // ========== WORKER STATS ==========
 
 // Get worker stats (JWT or API key)

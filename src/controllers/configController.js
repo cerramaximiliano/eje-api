@@ -525,6 +525,274 @@ function getNestedValue(obj, path) {
   }, obj);
 }
 
+// ========== INDIVIDUAL WORKER MANAGEMENT ==========
+
+/**
+ * Get individual worker configuration and status
+ * GET /config/manager/worker/:workerType
+ */
+const getWorkerConfig = async (req, res) => {
+  try {
+    const { workerType } = req.params;
+
+    if (!['verification', 'update', 'stuck'].includes(workerType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid worker type. Must be verification, update, or stuck'
+      });
+    }
+
+    const managerConfig = await ManagerConfigEje.getOrCreate();
+
+    const workerConfig = managerConfig.config?.workers?.[workerType];
+    const workerStatus = managerConfig.currentState?.workers?.[workerType];
+
+    return res.json({
+      success: true,
+      data: {
+        workerType,
+        config: workerConfig || {},
+        status: workerStatus || {},
+        globalSettings: {
+          workStartHour: managerConfig.config?.workStartHour,
+          workEndHour: managerConfig.config?.workEndHour,
+          workDays: managerConfig.config?.workDays,
+          timezone: managerConfig.config?.timezone,
+          cpuThreshold: managerConfig.config?.cpuThreshold,
+          memoryThreshold: managerConfig.config?.memoryThreshold
+        }
+      }
+    });
+  } catch (error) {
+    logger.error({ error: error.message, workerType: req.params.workerType }, 'Error getting worker config');
+    return res.status(500).json({
+      success: false,
+      message: 'Error getting worker configuration',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Update individual worker configuration
+ * PATCH /config/manager/worker/:workerType
+ */
+const updateWorkerConfig = async (req, res) => {
+  try {
+    const { workerType } = req.params;
+
+    if (!['verification', 'update', 'stuck'].includes(workerType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid worker type. Must be verification, update, or stuck'
+      });
+    }
+
+    const allowedFields = [
+      'enabled',
+      'minWorkers',
+      'maxWorkers',
+      'scaleUpThreshold',
+      'scaleDownThreshold',
+      'batchSize',
+      'delayBetweenRequests',
+      'maxRetries',
+      'cronExpression',
+      'workerName',
+      'workerScript',
+      'maxMemoryRestart'
+    ];
+
+    const updates = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates[`config.workers.${workerType}.${field}`] = req.body[field];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No valid fields to update'
+      });
+    }
+
+    const config = await ManagerConfigEje.findOneAndUpdate(
+      { name: 'eje-manager' },
+      { $set: updates },
+      { new: true }
+    );
+
+    logger.info({ workerType, updates: req.body }, 'Worker configuration updated');
+
+    return res.json({
+      success: true,
+      message: `${workerType} worker configuration updated`,
+      data: config?.config?.workers?.[workerType]
+    });
+  } catch (error) {
+    logger.error({ error: error.message, workerType: req.params.workerType }, 'Error updating worker config');
+    return res.status(500).json({
+      success: false,
+      message: 'Error updating worker configuration',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Toggle individual worker enabled state
+ * POST /config/manager/worker/:workerType/toggle
+ */
+const toggleWorker = async (req, res) => {
+  try {
+    const { workerType } = req.params;
+
+    if (!['verification', 'update', 'stuck'].includes(workerType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid worker type. Must be verification, update, or stuck'
+      });
+    }
+
+    const config = await ManagerConfigEje.getOrCreate();
+    const currentEnabled = config.config?.workers?.[workerType]?.enabled || false;
+    const newState = !currentEnabled;
+
+    await ManagerConfigEje.findOneAndUpdate(
+      { name: 'eje-manager' },
+      { $set: { [`config.workers.${workerType}.enabled`]: newState } }
+    );
+
+    logger.info({ workerType, enabled: newState }, 'Worker enabled state toggled');
+
+    return res.json({
+      success: true,
+      message: `${workerType} worker ${newState ? 'enabled' : 'disabled'}`,
+      workerType,
+      enabled: newState
+    });
+  } catch (error) {
+    logger.error({ error: error.message, workerType: req.params.workerType }, 'Error toggling worker');
+    return res.status(500).json({
+      success: false,
+      message: 'Error toggling worker state',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get all workers summary (config and status for all types)
+ * GET /config/manager/workers
+ */
+const getAllWorkersConfig = async (req, res) => {
+  try {
+    const managerConfig = await ManagerConfigEje.getOrCreate();
+
+    const workers = ['verification', 'update', 'stuck'].map(workerType => ({
+      workerType,
+      config: managerConfig.config?.workers?.[workerType] || {},
+      status: managerConfig.currentState?.workers?.[workerType] || {}
+    }));
+
+    return res.json({
+      success: true,
+      data: {
+        workers,
+        globalSettings: {
+          checkInterval: managerConfig.config?.checkInterval,
+          workStartHour: managerConfig.config?.workStartHour,
+          workEndHour: managerConfig.config?.workEndHour,
+          workDays: managerConfig.config?.workDays,
+          timezone: managerConfig.config?.timezone,
+          cpuThreshold: managerConfig.config?.cpuThreshold,
+          memoryThreshold: managerConfig.config?.memoryThreshold
+        },
+        managerState: {
+          isRunning: managerConfig.currentState?.isRunning,
+          isPaused: managerConfig.currentState?.isPaused,
+          lastCycleAt: managerConfig.currentState?.lastCycleAt,
+          cycleCount: managerConfig.currentState?.cycleCount,
+          systemResources: managerConfig.currentState?.systemResources
+        }
+      }
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, 'Error getting all workers config');
+    return res.status(500).json({
+      success: false,
+      message: 'Error getting workers configuration',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Update global manager settings (not worker-specific)
+ * PATCH /config/manager/settings
+ */
+const updateGlobalSettings = async (req, res) => {
+  try {
+    const allowedFields = [
+      'checkInterval',
+      'lockTimeoutMinutes',
+      'updateThresholdHours',
+      'cpuThreshold',
+      'memoryThreshold',
+      'workStartHour',
+      'workEndHour',
+      'workDays',
+      'timezone'
+    ];
+
+    const updates = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates[`config.${field}`] = req.body[field];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No valid fields to update'
+      });
+    }
+
+    const config = await ManagerConfigEje.findOneAndUpdate(
+      { name: 'eje-manager' },
+      { $set: updates },
+      { new: true }
+    );
+
+    logger.info({ updates: req.body }, 'Global manager settings updated');
+
+    return res.json({
+      success: true,
+      message: 'Global settings updated',
+      data: {
+        checkInterval: config?.config?.checkInterval,
+        lockTimeoutMinutes: config?.config?.lockTimeoutMinutes,
+        updateThresholdHours: config?.config?.updateThresholdHours,
+        cpuThreshold: config?.config?.cpuThreshold,
+        memoryThreshold: config?.config?.memoryThreshold,
+        workStartHour: config?.config?.workStartHour,
+        workEndHour: config?.config?.workEndHour,
+        workDays: config?.config?.workDays,
+        timezone: config?.config?.timezone
+      }
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, 'Error updating global settings');
+    return res.status(500).json({
+      success: false,
+      message: 'Error updating global settings',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   // Worker config
   getConfig,
@@ -543,5 +811,11 @@ module.exports = {
   // Worker stats
   getWorkerStats,
   getTodaySummary,
-  getRunHistory
+  getRunHistory,
+  // Individual worker management
+  getWorkerConfig,
+  updateWorkerConfig,
+  toggleWorker,
+  getAllWorkersConfig,
+  updateGlobalSettings
 };
