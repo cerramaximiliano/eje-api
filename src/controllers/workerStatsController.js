@@ -20,7 +20,7 @@ const getStats = async (req, res) => {
       locked
     ] = await Promise.all([
       CausasEje.countDocuments(),
-      CausasEje.countDocuments({ verified: false, isValid: true }),
+      CausasEje.countDocuments({ verified: false, isValid: null }),  // null = pendiente de verificación
       CausasEje.countDocuments({ verified: true }),
       CausasEje.countDocuments({ verified: true, isValid: true, isPrivate: false, detailsLoaded: false }),
       CausasEje.countDocuments({ detailsLoaded: true }),

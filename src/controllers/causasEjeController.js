@@ -274,7 +274,7 @@ const getStats = async (req, res) => {
       CausasEje.countDocuments({ isValid: true }),
       CausasEje.countDocuments({ isPrivate: true }),
       CausasEje.countDocuments({ detailsLoaded: true }),
-      CausasEje.countDocuments({ verified: false, isValid: true }),
+      CausasEje.countDocuments({ verified: false, isValid: null }),  // null = pendiente de verificación
       CausasEje.countDocuments({ verified: true, isValid: true, detailsLoaded: false }),
       CausasEje.countDocuments({ errorCount: { $gt: 0 } })
     ]);

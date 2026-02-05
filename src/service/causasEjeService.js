@@ -70,7 +70,7 @@ async function associateFolderToCausa({ causaId, cuij, numero, anio, folderId, u
       userCausaIds: userObjectId ? [userObjectId] : [],
       source: 'app',
       verified: false,
-      isValid: true,
+      isValid: null,  // null = pendiente de verificación
       detailsLoaded: false,
       updateHistory: [{
         timestamp: new Date(),
@@ -218,12 +218,13 @@ async function updateUserUpdatePreference({ causaId, userId, enabled }) {
 
 /**
  * Get pending causas for verification worker
+ * isValid: null = pendiente de verificación
  */
 async function getPendingVerification(limit = 10) {
   try {
     const causas = await CausasEje.find({
       verified: false,
-      isValid: true,
+      isValid: null,  // null = pendiente de verificación
       errorCount: { $lt: 3 },
       $or: [
         { lockedBy: { $exists: false } },
