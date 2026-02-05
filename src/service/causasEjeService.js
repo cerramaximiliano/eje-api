@@ -56,7 +56,10 @@ async function associateFolderToCausa({ causaId, cuij, numero, anio, folderId, u
         success: true,
         created: false,
         causaId: causa._id,
-        cuij: causa.cuij
+        cuij: causa.cuij,
+        verified: causa.verified,
+        isValid: causa.isValid,
+        caratula: causa.caratula
       };
     }
 
@@ -96,7 +99,10 @@ async function associateFolderToCausa({ causaId, cuij, numero, anio, folderId, u
       success: true,
       created: true,
       causaId: newCausa._id,
-      cuij: newCausa.cuij
+      cuij: newCausa.cuij,
+      verified: newCausa.verified,
+      isValid: newCausa.isValid,
+      caratula: newCausa.caratula
     };
   } catch (error) {
     logger.error({ error: error.message, folderId }, 'Error associating folder to causa');
