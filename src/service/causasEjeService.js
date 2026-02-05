@@ -30,6 +30,20 @@ async function associateFolderToCausa({ causaId, cuij, numero, anio, folderId, u
 
       if (userObjectId) {
         updateOps.$addToSet.userCausaIds = userObjectId;
+
+        // Check if user already has update preference set
+        const existingUserPref = causa.userUpdatesEnabled?.find(
+          u => u.userId?.toString() === userObjectId.toString()
+        );
+
+        // If user doesn't have preference, add with enabled: true
+        if (!existingUserPref) {
+          if (!updateOps.$addToSet.userUpdatesEnabled) {
+            updateOps.$addToSet.userUpdatesEnabled = { userId: userObjectId, enabled: true };
+          }
+          // Set update flag to true since new user wants updates
+          updateOps.$set = { update: true };
+        }
       }
 
       // Add to update history
@@ -71,6 +85,8 @@ async function associateFolderToCausa({ causaId, cuij, numero, anio, folderId, u
       caratula: `Pendiente de verificación: ${searchTerm || cuij || `${numero}/${anio}`}`,
       folderIds: [folderObjectId],
       userCausaIds: userObjectId ? [userObjectId] : [],
+      userUpdatesEnabled: userObjectId ? [{ userId: userObjectId, enabled: true }] : [],
+      update: !!userObjectId,  // Enable updates if user is associated
       source: 'app',
       verified: false,
       isValid: null,  // null = pendiente de verificación
