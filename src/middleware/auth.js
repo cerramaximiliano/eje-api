@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { logger } = require('../config/pino');
+const User = require('../models/user');
 
 /**
  * Get current date in Argentina timezone (UTC-3)
@@ -72,11 +73,7 @@ const verifyToken = (req, res, next) => {
  */
 const verifyAdmin = async (req, res, next) => {
   try {
-    // Import User model dynamically to avoid circular dependencies
-    const mongoose = require('mongoose');
-    const User = mongoose.model('User');
-
-    const user = await User.findById(req.userId);
+    const user = await User.findById(req.userId).select('role');
 
     if (!user) {
       return res.status(404).json({
