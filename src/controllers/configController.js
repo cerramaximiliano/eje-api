@@ -547,12 +547,31 @@ const getWorkerConfig = async (req, res) => {
     const workerConfig = managerConfig.config?.workers?.[workerType];
     const workerStatus = managerConfig.currentState?.workers?.[workerType];
 
+    // Determine effective schedule
+    const usesGlobalSchedule = workerConfig?.schedule?.useGlobalSchedule !== false;
+    const effectiveSchedule = usesGlobalSchedule
+      ? {
+          workStartHour: managerConfig.config?.workStartHour,
+          workEndHour: managerConfig.config?.workEndHour,
+          workDays: managerConfig.config?.workDays,
+          useGlobalSchedule: true,
+          source: 'global'
+        }
+      : {
+          workStartHour: workerConfig?.schedule?.workStartHour,
+          workEndHour: workerConfig?.schedule?.workEndHour,
+          workDays: workerConfig?.schedule?.workDays,
+          useGlobalSchedule: false,
+          source: 'worker-specific'
+        };
+
     return res.json({
       success: true,
       data: {
         workerType,
         config: workerConfig || {},
         status: workerStatus || {},
+        effectiveSchedule,
         globalSettings: {
           workStartHour: managerConfig.config?.workStartHour,
           workEndHour: managerConfig.config?.workEndHour,
@@ -594,6 +613,7 @@ const updateWorkerConfig = async (req, res) => {
       'maxWorkers',
       'scaleUpThreshold',
       'scaleDownThreshold',
+      'updateThresholdHours',
       'batchSize',
       'delayBetweenRequests',
       'maxRetries',
@@ -603,10 +623,37 @@ const updateWorkerConfig = async (req, res) => {
       'maxMemoryRestart'
     ];
 
+    // Schedule fields (nested)
+    const scheduleFields = [
+      'schedule.workStartHour',
+      'schedule.workEndHour',
+      'schedule.workDays',
+      'schedule.useGlobalSchedule'
+    ];
+
     const updates = {};
+
+    // Handle regular fields
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
         updates[`config.workers.${workerType}.${field}`] = req.body[field];
+      }
+    }
+
+    // Handle schedule fields (can be sent as nested object or flat)
+    if (req.body.schedule && typeof req.body.schedule === 'object') {
+      // Nested schedule object
+      if (req.body.schedule.workStartHour !== undefined) {
+        updates[`config.workers.${workerType}.schedule.workStartHour`] = req.body.schedule.workStartHour;
+      }
+      if (req.body.schedule.workEndHour !== undefined) {
+        updates[`config.workers.${workerType}.schedule.workEndHour`] = req.body.schedule.workEndHour;
+      }
+      if (req.body.schedule.workDays !== undefined) {
+        updates[`config.workers.${workerType}.schedule.workDays`] = req.body.schedule.workDays;
+      }
+      if (req.body.schedule.useGlobalSchedule !== undefined) {
+        updates[`config.workers.${workerType}.schedule.useGlobalSchedule`] = req.body.schedule.useGlobalSchedule;
       }
     }
 
@@ -690,11 +737,31 @@ const getAllWorkersConfig = async (req, res) => {
   try {
     const managerConfig = await ManagerConfigEje.getOrCreate();
 
-    const workers = ['verification', 'update', 'stuck'].map(workerType => ({
-      workerType,
-      config: managerConfig.config?.workers?.[workerType] || {},
-      status: managerConfig.currentState?.workers?.[workerType] || {}
-    }));
+    const workers = ['verification', 'update', 'stuck'].map(workerType => {
+      const workerConfig = managerConfig.config?.workers?.[workerType] || {};
+      const usesGlobalSchedule = workerConfig?.schedule?.useGlobalSchedule !== false;
+
+      return {
+        workerType,
+        config: workerConfig,
+        status: managerConfig.currentState?.workers?.[workerType] || {},
+        effectiveSchedule: usesGlobalSchedule
+          ? {
+              workStartHour: managerConfig.config?.workStartHour,
+              workEndHour: managerConfig.config?.workEndHour,
+              workDays: managerConfig.config?.workDays,
+              useGlobalSchedule: true,
+              source: 'global'
+            }
+          : {
+              workStartHour: workerConfig?.schedule?.workStartHour,
+              workEndHour: workerConfig?.schedule?.workEndHour,
+              workDays: workerConfig?.schedule?.workDays,
+              useGlobalSchedule: false,
+              source: 'worker-specific'
+            }
+      };
+    });
 
     return res.json({
       success: true,
