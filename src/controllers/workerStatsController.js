@@ -250,6 +250,82 @@ const resetErrorCount = async (req, res) => {
 };
 
 /**
+ * Get eligibility stats for update coverage
+ * GET /worker-stats/eligibility
+ */
+const getEligibilityStats = async (req, res) => {
+  try {
+    // Get Argentina date (UTC-3)
+    const now = new Date();
+    const argentinaOffset = -3 * 60;
+    const argentinaMinutes = now.getUTCHours() * 60 + now.getUTCMinutes() + argentinaOffset;
+    let dayOffset = 0;
+    if (argentinaMinutes < 0) {
+      dayOffset = -1;
+    } else if (argentinaMinutes >= 24 * 60) {
+      dayOffset = 1;
+    }
+    const argentinaDate = new Date(now);
+    argentinaDate.setUTCDate(argentinaDate.getUTCDate() + dayOffset);
+    const todayStr = `${argentinaDate.getUTCFullYear()}-${String(argentinaDate.getUTCMonth() + 1).padStart(2, '0')}-${String(argentinaDate.getUTCDate()).padStart(2, '0')}`;
+
+    // Threshold hours from config (default 4 hours)
+    const thresholdHours = parseInt(process.env.UPDATE_THRESHOLD_HOURS, 10) || 4;
+
+    // Query for eligible documents (verified, valid, not private, update: true)
+    const eligibleFilter = {
+      verified: true,
+      isValid: true,
+      isPrivate: { $ne: true },
+      update: true
+    };
+
+    // Query for documents updated today
+    const updatedTodayFilter = {
+      ...eligibleFilter,
+      'updateStats.today.date': todayStr
+    };
+
+    const [totalElegibles, actualizadosHoy, noElegibles] = await Promise.all([
+      CausasEje.countDocuments(eligibleFilter),
+      CausasEje.countDocuments(updatedTodayFilter),
+      CausasEje.countDocuments({
+        $or: [
+          { verified: false },
+          { isValid: false },
+          { isPrivate: true },
+          { update: { $ne: true } }
+        ]
+      })
+    ]);
+
+    const pendientesHoy = totalElegibles - actualizadosHoy;
+    const coveragePercent = totalElegibles > 0 ? (actualizadosHoy / totalElegibles) * 100 : 0;
+
+    return res.json({
+      success: true,
+      data: {
+        elegibles: totalElegibles,
+        noElegibles,
+        totalElegibles,
+        actualizadosHoy,
+        pendientesHoy,
+        coveragePercent,
+        thresholdHours,
+        todayDate: todayStr
+      }
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, 'Error getting eligibility stats');
+    return res.status(500).json({
+      success: false,
+      message: 'Error getting eligibility stats',
+      error: error.message
+    });
+  }
+};
+
+/**
  * Get recent activity
  * GET /worker-stats/activity
  */
@@ -301,5 +377,6 @@ module.exports = {
   getStuckDocuments,
   clearStuckLocks,
   resetErrorCount,
-  getRecentActivity
+  getRecentActivity,
+  getEligibilityStats
 };

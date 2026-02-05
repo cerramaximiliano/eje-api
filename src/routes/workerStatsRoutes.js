@@ -6,6 +6,7 @@ const controller = require('../controllers/workerStatsController');
 // Stats (JWT or API key)
 router.get('/', verifyTokenOrApiKey, controller.getStats);
 router.get('/activity', verifyTokenOrApiKey, controller.getRecentActivity);
+router.get('/eligibility', verifyTokenOrApiKey, controller.getEligibilityStats);
 
 // Admin routes
 router.get('/errors', verifyToken, verifyAdmin, controller.getErrorDocuments);
