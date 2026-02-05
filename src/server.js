@@ -7,7 +7,7 @@ const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 
-const { logger, cleanLogs } = require('./config/pino');
+const { logger, cleanLogs, printStartupBanner } = require('./config/pino');
 const { loadSecrets } = require('./config/env');
 const routes = require('./routes');
 
@@ -51,7 +51,7 @@ function configureCors() {
 }
 
 /**
- * Connect to MongoDB
+ * Conectar a MongoDB
  */
 async function connectDatabase() {
   const mongoUri = NODE_ENV === 'local'
@@ -59,10 +59,8 @@ async function connectDatabase() {
     : process.env.URLDB;
 
   if (!mongoUri) {
-    throw new Error('MongoDB URI not configured');
+    throw new Error('URI de MongoDB no configurada');
   }
-
-  logger.info('Connecting to MongoDB (' + NODE_ENV + ')...');
 
   await mongoose.connect(mongoUri, {
     maxPoolSize: 10,
@@ -70,18 +68,16 @@ async function connectDatabase() {
     socketTimeoutMS: 45000
   });
 
-  logger.info('Connected to MongoDB');
-
   mongoose.connection.on('error', (err) => {
-    logger.error('MongoDB connection error: ' + err.message);
+    logger.error('Error de conexión MongoDB: ' + err.message);
   });
 
   mongoose.connection.on('disconnected', () => {
-    logger.warn('MongoDB disconnected');
+    logger.warn('MongoDB desconectado');
   });
 
   mongoose.connection.on('reconnected', () => {
-    logger.info('MongoDB reconnected');
+    logger.info('MongoDB reconectado');
   });
 }
 
@@ -141,107 +137,120 @@ function configureRoutes() {
 }
 
 /**
- * Graceful shutdown
+ * Apagado graceful
  */
 async function gracefulShutdown(signal) {
   if (isShuttingDown) return;
   isShuttingDown = true;
-  
-  logger.info(signal + ' received. Shutting down gracefully...');
-  
+
+  logger.info(`Señal ${signal} recibida. Apagando servidor...`);
+
   if (server) {
     await new Promise((resolve) => {
       server.close((err) => {
         if (err) {
-          logger.error('Error closing HTTP server: ' + err.message);
+          logger.error('Error cerrando servidor HTTP: ' + err.message);
         } else {
-          logger.info('HTTP server closed');
+          logger.info('Servidor HTTP cerrado');
         }
         resolve();
       });
     });
   }
-  
+
   try {
     await mongoose.connection.close();
-    logger.info('MongoDB connection closed');
+    logger.info('Conexión MongoDB cerrada');
   } catch (err) {
-    logger.error('Error closing MongoDB: ' + err.message);
+    logger.error('Error cerrando MongoDB: ' + err.message);
   }
-  
+
   process.exit(0);
 }
 
 /**
- * Try to start listening with retries
+ * Intentar iniciar el servidor con reintentos
  */
 function startListening(retries = 5, delay = 2000) {
   return new Promise((resolve, reject) => {
     const tryStart = (attempt) => {
       if (isShuttingDown) {
-        return reject(new Error('Shutdown in progress'));
+        return reject(new Error('Apagado en progreso'));
       }
-      
+
       server = app.listen(PORT);
-      
+
       server.on('listening', () => {
-        logger.info('EJE API server started on port ' + PORT + ' (' + NODE_ENV + ')');
         resolve(server);
       });
-      
+
       server.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
           if (attempt < retries) {
-            logger.warn('Port ' + PORT + ' in use, retrying in ' + (delay/1000) + 's... (attempt ' + (attempt+1) + '/' + retries + ')');
+            logger.warn(`Puerto ${PORT} en uso, reintentando en ${delay/1000}s... (intento ${attempt+1}/${retries})`);
             server = null;
             setTimeout(() => tryStart(attempt + 1), delay);
           } else {
-            logger.error('Port ' + PORT + ' still in use after ' + retries + ' attempts');
+            logger.error(`Puerto ${PORT} sigue en uso después de ${retries} intentos`);
             reject(err);
           }
         } else {
-          logger.error('Server error: ' + err.message);
+          logger.error('Error del servidor: ' + err.message);
           reject(err);
         }
       });
     };
-    
+
     tryStart(0);
   });
 }
 
 /**
- * Start the server
+ * Iniciar el servidor
  */
 async function startServer() {
   try {
+    // Cargar secretos si es necesario
     if (NODE_ENV !== 'development' || !process.env.URLDB) {
-      logger.info('Loading secrets from AWS...');
       await loadSecrets();
     }
 
+    // Conectar a MongoDB
     await connectDatabase();
+
+    // Configurar middleware y rutas
     configureMiddleware();
     configureRoutes();
 
+    // Limpieza de logs periódica
     cleanLogs();
     setInterval(cleanLogs, 60 * 60 * 1000);
 
+    // Iniciar servidor
     await startListening();
-    
+
+    // Mostrar banner de inicio
+    printStartupBanner({
+      name: 'EJE API',
+      version: '1.0.0',
+      environment: NODE_ENV,
+      port: PORT,
+      mongoStatus: 'Conectado'
+    });
+
   } catch (error) {
-    logger.error('Failed to start server: ' + error.message);
+    logger.error('Error al iniciar servidor: ' + error.message);
     process.exit(1);
   }
 }
 
 process.on('uncaughtException', (error) => {
-  logger.error('Uncaught exception: ' + error.message);
+  logger.error('Excepción no capturada: ' + error.message);
   gracefulShutdown('uncaughtException').catch(() => process.exit(1));
 });
 
 process.on('unhandledRejection', (reason) => {
-  logger.error('Unhandled promise rejection: ' + reason);
+  logger.error('Promesa rechazada no manejada: ' + reason);
 });
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
