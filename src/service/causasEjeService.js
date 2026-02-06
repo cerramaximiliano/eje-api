@@ -142,9 +142,18 @@ async function dissociateFolderFromCausa({ causaId, folderId, userId }) {
       };
     }
 
-    // Remove folder from array
+    // Calculate remaining folderIds after removal
+    const remainingFolderIds = (causa.folderIds || []).filter(
+      id => id.toString() !== folderObjectId.toString()
+    );
+
+    // Remove folder from array and update the 'update' field
     const updateOps = {
-      $pull: { folderIds: folderObjectId }
+      $pull: { folderIds: folderObjectId },
+      $set: {
+        // update = true only if there are remaining folders
+        update: remainingFolderIds.length > 0
+      }
     };
 
     // Add to update history
@@ -158,19 +167,22 @@ async function dissociateFolderFromCausa({ causaId, folderId, userId }) {
         movimientosTotal: causa.movimientos?.length || 0,
         details: {
           folderId: folderId,
-          userId: userId
+          userId: userId,
+          remainingFolders: remainingFolderIds.length
         }
       }
     };
 
     await CausasEje.findByIdAndUpdate(causaId, updateOps);
 
-    logger.info({ causaId, folderId }, 'Folder dissociated from causa');
+    logger.info({ causaId, folderId, remainingFolders: remainingFolderIds.length, update: remainingFolderIds.length > 0 }, 'Folder dissociated from causa');
 
     return {
       success: true,
       causaId,
-      cuij: causa.cuij
+      cuij: causa.cuij,
+      remainingFolders: remainingFolderIds.length,
+      update: remainingFolderIds.length > 0
     };
   } catch (error) {
     logger.error({ error: error.message, causaId, folderId }, 'Error dissociating folder from causa');
