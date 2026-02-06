@@ -19,8 +19,8 @@ async function associateFolderToCausa({ causaId, cuij, numero, anio, folderId, u
       causa = await CausasEje.findOne({ numero, anio });
     }
 
-    const folderObjectId = mongoose.Types.ObjectId(folderId);
-    const userObjectId = userId ? mongoose.Types.ObjectId(userId) : null;
+    const folderObjectId = new mongoose.Types.ObjectId(folderId);
+    const userObjectId = userId ? new mongoose.Types.ObjectId(userId) : null;
 
     if (causa) {
       // Update existing causa
@@ -131,7 +131,7 @@ async function associateFolderToCausa({ causaId, cuij, numero, anio, folderId, u
  */
 async function dissociateFolderFromCausa({ causaId, folderId, userId }) {
   try {
-    const folderObjectId = mongoose.Types.ObjectId(folderId);
+    const folderObjectId = new mongoose.Types.ObjectId(folderId);
 
     const causa = await CausasEje.findById(causaId);
 
@@ -183,7 +183,7 @@ async function dissociateFolderFromCausa({ causaId, folderId, userId }) {
  */
 async function findCausaByFolderId(folderId) {
   try {
-    const folderObjectId = mongoose.Types.ObjectId(folderId);
+    const folderObjectId = new mongoose.Types.ObjectId(folderId);
 
     const causa = await CausasEje.findOne({
       folderIds: folderObjectId
@@ -201,7 +201,7 @@ async function findCausaByFolderId(folderId) {
  */
 async function updateUserUpdatePreference({ causaId, userId, enabled }) {
   try {
-    const userObjectId = mongoose.Types.ObjectId(userId);
+    const userObjectId = new mongoose.Types.ObjectId(userId);
 
     const causa = await CausasEje.findById(causaId);
 

@@ -469,7 +469,7 @@ const findByFolderId = async (req, res) => {
     const mongoose = require('mongoose');
 
     const causas = await CausasEje.find({
-      folderIds: mongoose.Types.ObjectId(folderId)
+      folderIds: new mongoose.Types.ObjectId(folderId)
     }).lean();
 
     return res.json({
@@ -500,7 +500,7 @@ const findByUserId = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const filter = {
-      userCausaIds: mongoose.Types.ObjectId(userId)
+      userCausaIds: new mongoose.Types.ObjectId(userId)
     };
 
     const [causas, total] = await Promise.all([

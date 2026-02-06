@@ -158,12 +158,12 @@ function buildCausaFilter(query) {
   // Folder association
   if (query.folderId) {
     const mongoose = require('mongoose');
-    filter.folderIds = mongoose.Types.ObjectId(query.folderId);
+    filter.folderIds = new mongoose.Types.ObjectId(query.folderId);
   }
 
   if (query.userId) {
     const mongoose = require('mongoose');
-    filter.userCausaIds = mongoose.Types.ObjectId(query.userId);
+    filter.userCausaIds = new mongoose.Types.ObjectId(query.userId);
   }
 
   // Update flag
