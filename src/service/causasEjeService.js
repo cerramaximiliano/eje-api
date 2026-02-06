@@ -86,7 +86,7 @@ async function associateFolderToCausa({ causaId, cuij, numero, anio, folderId, u
       folderIds: [folderObjectId],
       userCausaIds: userObjectId ? [userObjectId] : [],
       userUpdatesEnabled: userObjectId ? [{ userId: userObjectId, enabled: true }] : [],
-      update: !!userObjectId,  // Enable updates if user is associated
+      update: true,  // Always true when has folderIds
       source: 'app',
       verified: false,
       isValid: null,  // null = pendiente de verificación
