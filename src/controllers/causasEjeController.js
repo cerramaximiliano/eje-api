@@ -1,4 +1,4 @@
-const { CausasEje } = require('eje-models');
+const { CausasEje, FolderEje } = require('eje-models');
 const { logger } = require('../config/pino');
 const {
   buildPaginationMeta,
@@ -665,6 +665,38 @@ const resolvePivot = async (req, res) => {
         resolvedCausaId: selectedCausaId
       }
     });
+
+    // Update all folders linked to this pivot
+    for (const folderId of foldersToAdd) {
+      try {
+        await FolderEje.findByIdAndUpdate(folderId, {
+          $set: {
+            causaId: selectedCausaId,
+            causaType: 'CausasEje',
+            causaAssociationStatus: 'success',
+            causaVerified: true,
+            causaIsValid: true,
+            causaLastSyncDate: new Date(),
+            pendingCausaIds: [],
+            pendingCausaType: null,
+            searchTerm: null,
+            causaAssociationError: null
+          },
+          $push: {
+            causaAssociationHistory: {
+              status: 'success',
+              timestamp: new Date(),
+              source: 'user',
+              details: `Usuario seleccionó causa: ${selectedCausa.caratula?.substring(0, 50) || selectedCausa.cuij}`,
+              causaId: selectedCausaId
+            }
+          }
+        });
+        logger.info({ folderId: folderId.toString(), selectedCausaId }, 'Folder updated after pivot resolution');
+      } catch (folderError) {
+        logger.error({ folderId: folderId.toString(), error: folderError.message }, 'Error updating folder after pivot resolution');
+      }
+    }
 
     // Delete the non-selected linked causas (only if they have no other folderIds or userCausaIds)
     const nonSelectedCausaIds = pivot.pivotCausaIds.filter(
