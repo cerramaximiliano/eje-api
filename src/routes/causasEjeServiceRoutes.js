@@ -3,8 +3,8 @@ const router = express.Router();
 const { verifyToken, verifyApiKey, verifyTokenOrApiKey } = require('../middleware/auth');
 const controller = require('../controllers/causasEjeServiceController');
 
-// User routes (require JWT)
-router.post('/associate-folder', verifyToken, controller.associateFolder);
+// User routes (require JWT or API key for testing)
+router.post('/associate-folder', verifyTokenOrApiKey, controller.associateFolder);
 router.delete('/dissociate-folder', verifyToken, controller.dissociateFolder);
 router.get('/by-folder/:folderId', verifyToken, controller.findByFolder);
 router.patch('/update-preference', verifyToken, controller.updateUserPreference);
