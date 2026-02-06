@@ -171,6 +171,24 @@ function buildCausaFilter(query) {
     filter.update = query.update === 'true' || query.update === true;
   }
 
+  // Pivot filters
+  if (query.isPivot !== undefined) {
+    filter.isPivot = query.isPivot === 'true' || query.isPivot === true;
+  }
+
+  if (query.resolved !== undefined) {
+    filter.resolved = query.resolved === 'true' || query.resolved === true;
+  }
+
+  if (query.searchTerm) {
+    filter.searchTerm = { $regex: query.searchTerm, $options: 'i' };
+  }
+
+  // Source filter
+  if (query.source) {
+    filter.source = query.source;
+  }
+
   return filter;
 }
 

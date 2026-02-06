@@ -31,6 +31,10 @@ router.get('/:id/intervinientes', verifyToken, causasEjeController.getIntervinie
 // Get causas relacionadas
 router.get('/:id/relacionadas', verifyToken, causasEjeController.getCausasRelacionadas);
 
+// Pivot routes
+router.get('/:id/linked-causas', verifyToken, causasEjeController.getLinkedCausas);
+router.post('/:id/resolve', verifyToken, verifyAdmin, causasEjeController.resolvePivot);
+
 // Find by number and year
 router.get('/:number/:year', verifyTokenOrApiKey, causasEjeController.findByNumberAndYear);
 

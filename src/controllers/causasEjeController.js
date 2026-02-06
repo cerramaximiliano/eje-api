@@ -137,6 +137,7 @@ const searchCausas = async (req, res) => {
     return res.json({
       success: true,
       data: causas,
+      count: total,
       pagination: buildPaginationMeta(page, limit, total)
     });
   } catch (error) {
@@ -526,6 +527,185 @@ const findByUserId = async (req, res) => {
   }
 };
 
+/**
+ * Get linked causas for a pivot
+ * GET /causas-eje/:id/linked-causas
+ */
+const getLinkedCausas = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const pivot = await CausasEje.findById(id).select('isPivot pivotCausaIds searchTerm').lean();
+
+    if (!pivot) {
+      return res.status(404).json({
+        success: false,
+        message: 'Pivot not found'
+      });
+    }
+
+    if (!pivot.isPivot) {
+      return res.status(400).json({
+        success: false,
+        message: 'Document is not a pivot'
+      });
+    }
+
+    if (!pivot.pivotCausaIds || pivot.pivotCausaIds.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        count: 0
+      });
+    }
+
+    const linkedCausas = await CausasEje.find({
+      _id: { $in: pivot.pivotCausaIds }
+    }).lean();
+
+    return res.json({
+      success: true,
+      data: linkedCausas,
+      count: linkedCausas.length,
+      searchTerm: pivot.searchTerm
+    });
+  } catch (error) {
+    logger.error({ error: error.message, id: req.params.id }, 'Error getting linked causas');
+    return res.status(500).json({
+      success: false,
+      message: 'Error getting linked causas',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Resolve a pivot by selecting one of the linked causas
+ * POST /causas-eje/:id/resolve
+ * Body: { selectedCausaId: string }
+ */
+const resolvePivot = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { selectedCausaId } = req.body;
+
+    if (!selectedCausaId) {
+      return res.status(400).json({
+        success: false,
+        message: 'selectedCausaId is required'
+      });
+    }
+
+    const pivot = await CausasEje.findById(id);
+
+    if (!pivot) {
+      return res.status(404).json({
+        success: false,
+        message: 'Pivot not found'
+      });
+    }
+
+    if (!pivot.isPivot) {
+      return res.status(400).json({
+        success: false,
+        message: 'Document is not a pivot'
+      });
+    }
+
+    if (pivot.resolved) {
+      return res.status(400).json({
+        success: false,
+        message: 'Pivot already resolved'
+      });
+    }
+
+    // Verify the selected causa is one of the linked causas
+    const isLinked = pivot.pivotCausaIds.some(
+      causaId => causaId.toString() === selectedCausaId
+    );
+
+    if (!isLinked) {
+      return res.status(400).json({
+        success: false,
+        message: 'Selected causa is not linked to this pivot'
+      });
+    }
+
+    // Get the selected causa
+    const selectedCausa = await CausasEje.findById(selectedCausaId);
+
+    if (!selectedCausa) {
+      return res.status(404).json({
+        success: false,
+        message: 'Selected causa not found'
+      });
+    }
+
+    // Transfer folderIds and userCausaIds from pivot to selected causa
+    const foldersToAdd = pivot.folderIds || [];
+    const usersToAdd = pivot.userCausaIds || [];
+
+    if (foldersToAdd.length > 0 || usersToAdd.length > 0) {
+      await CausasEje.findByIdAndUpdate(selectedCausaId, {
+        $addToSet: {
+          folderIds: { $each: foldersToAdd },
+          userCausaIds: { $each: usersToAdd }
+        },
+        $set: {
+          update: true  // Enable updates for the selected causa
+        }
+      });
+    }
+
+    // Mark pivot as resolved
+    await CausasEje.findByIdAndUpdate(id, {
+      $set: {
+        resolved: true,
+        resolvedAt: new Date(),
+        resolvedCausaId: selectedCausaId
+      }
+    });
+
+    // Delete the non-selected linked causas (only if they have no other folderIds or userCausaIds)
+    const nonSelectedCausaIds = pivot.pivotCausaIds.filter(
+      causaId => causaId.toString() !== selectedCausaId
+    );
+
+    for (const causaId of nonSelectedCausaIds) {
+      const causa = await CausasEje.findById(causaId);
+      if (causa && (!causa.folderIds || causa.folderIds.length === 0) &&
+          (!causa.userCausaIds || causa.userCausaIds.length === 0)) {
+        await CausasEje.findByIdAndDelete(causaId);
+        logger.info({ causaId: causaId.toString() }, 'Deleted unused linked causa');
+      }
+    }
+
+    logger.info({
+      pivotId: id,
+      selectedCausaId,
+      transferredFolders: foldersToAdd.length,
+      transferredUsers: usersToAdd.length
+    }, 'Pivot resolved');
+
+    return res.json({
+      success: true,
+      message: 'Pivot resolved successfully',
+      data: {
+        pivotId: id,
+        selectedCausaId,
+        selectedCuij: selectedCausa.cuij
+      }
+    });
+  } catch (error) {
+    logger.error({ error: error.message, id: req.params.id }, 'Error resolving pivot');
+    return res.status(500).json({
+      success: false,
+      message: 'Error resolving pivot',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   findByCuij,
   findByNumberAndYear,
@@ -539,5 +719,7 @@ module.exports = {
   updateCausa,
   deleteCausa,
   findByFolderId,
-  findByUserId
+  findByUserId,
+  getLinkedCausas,
+  resolvePivot
 };
