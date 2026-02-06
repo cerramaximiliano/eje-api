@@ -220,8 +220,8 @@ async function updateUserUpdatePreference({ causaId, userId, enabled }) {
       causa.userUpdatesEnabled.push({ userId: userObjectId, enabled });
     }
 
-    // Update global update flag based on any user having updates enabled
-    causa.update = causa.userUpdatesEnabled.some(u => u.enabled);
+    // Update global update flag: true if has linked folders
+    causa.update = causa.folderIds && causa.folderIds.length > 0;
 
     await causa.save();
 
