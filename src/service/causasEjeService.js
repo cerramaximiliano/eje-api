@@ -101,7 +101,12 @@ async function associateFolderToCausa({ causaId, cuij, numero, anio, folderId, u
         // isPrivate determina folderJuris.item en law-analytics-server:
         // true  → "CABA - Penal Contravencional y Faltas" (causas privadas)
         // false → "CABA - Contencioso Administrativo y Tributario" (default)
-        isPrivate: causa.isPrivate === true
+        isPrivate: causa.isPrivate === true,
+        // fechaInicio se propaga a folder.initialDateFolder y
+        // folder.judFolder.initialDateJudFolder en el create del server.
+        // Puede ser null/undefined si la causa todavía no fue scrapeada
+        // en profundidad (verification-worker la setea cuando aparece).
+        fechaInicio: causa.fechaInicio || null
       };
 
       // Si es un pivot, incluir datos adicionales para selección múltiple
@@ -158,8 +163,9 @@ async function associateFolderToCausa({ causaId, cuij, numero, anio, folderId, u
       verified: newCausa.verified,
       isValid: newCausa.isValid,
       caratula: newCausa.caratula,
-      // Causa recién creada: isPrivate aún desconocido, default false
-      isPrivate: false
+      // Causa recién creada: isPrivate y fechaInicio aún desconocidos.
+      isPrivate: false,
+      fechaInicio: null
     };
   } catch (error) {
     logger.error({ error: error.message, folderId }, 'Error associating folder to causa');
