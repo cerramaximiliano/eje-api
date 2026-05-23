@@ -10,13 +10,36 @@ async function associateFolderToCausa({ causaId, cuij, numero, anio, folderId, u
   try {
     let causa;
 
-    // Find existing causa
+    // Find existing causa (preferring non-pivot causas)
     if (causaId) {
       causa = await CausasEje.findById(causaId);
     } else if (cuij) {
-      causa = await CausasEje.findOne({ cuij });
+      // Primero buscar causa normal, luego pivot
+      causa = await CausasEje.findOne({ cuij, isPivot: { $ne: true } });
+      if (!causa) {
+        causa = await CausasEje.findOne({ cuij });
+      }
     } else if (numero && anio) {
-      causa = await CausasEje.findOne({ numero, anio });
+      // Primero buscar causa normal con ese número/año
+      causa = await CausasEje.findOne({ numero, anio, isPivot: { $ne: true } });
+
+      // Si no hay causa normal, buscar un pivot
+      if (!causa) {
+        // Buscar pivot por numero/anio (más robusto que searchTerm)
+        causa = await CausasEje.findOne({
+          isPivot: true,
+          numero: numero,
+          anio: anio
+        });
+
+        // Fallback: buscar por searchTerm original (por compatibilidad)
+        if (!causa && searchTerm) {
+          causa = await CausasEje.findOne({
+            isPivot: true,
+            searchTerm: searchTerm
+          });
+        }
+      }
     }
 
     const folderObjectId = new mongoose.Types.ObjectId(folderId);
@@ -64,17 +87,33 @@ async function associateFolderToCausa({ causaId, cuij, numero, anio, folderId, u
 
       await CausasEje.findByIdAndUpdate(causa._id, updateOps);
 
-      logger.info({ causaId: causa._id, folderId }, 'Folder associated to existing causa');
+      logger.info({ causaId: causa._id, folderId, isPivot: causa.isPivot }, 'Folder associated to existing causa');
 
-      return {
+      // Preparar respuesta base
+      const response = {
         success: true,
         created: false,
         causaId: causa._id,
         cuij: causa.cuij,
         verified: causa.verified,
         isValid: causa.isValid,
-        caratula: causa.caratula
+        caratula: causa.caratula,
+        // isPrivate determina folderJuris.item en law-analytics-server:
+        // true  → "CABA - Penal Contravencional y Faltas" (causas privadas)
+        // false → "CABA - Contencioso Administrativo y Tributario" (default)
+        isPrivate: causa.isPrivate === true
       };
+
+      // Si es un pivot, incluir datos adicionales para selección múltiple
+      if (causa.isPivot) {
+        response.isPivot = true;
+        response.pivotCausaIds = causa.pivotCausaIds || [];
+        response.pendingCausaIds = causa.pivotCausaIds || [];  // Alias para compatibilidad con folderController
+        response.causaAssociationStatus = 'pending_selection';
+        response.searchTerm = causa.searchTerm;
+      }
+
+      return response;
     }
 
     // Create new causa (minimal data, will be verified and updated by workers)
@@ -118,7 +157,9 @@ async function associateFolderToCausa({ causaId, cuij, numero, anio, folderId, u
       cuij: newCausa.cuij,
       verified: newCausa.verified,
       isValid: newCausa.isValid,
-      caratula: newCausa.caratula
+      caratula: newCausa.caratula,
+      // Causa recién creada: isPrivate aún desconocido, default false
+      isPrivate: false
     };
   } catch (error) {
     logger.error({ error: error.message, folderId }, 'Error associating folder to causa');
