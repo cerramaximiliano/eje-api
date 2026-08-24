@@ -370,8 +370,16 @@ const acknowledgeAlert = async (req, res) => {
 
     // Acknowledge por _id del subdocumento (robusto ante reordenamiento del
     // array de alertas; el índice de posición driftea al filtrar/paginar).
+    // AlertSchema de eje-models tiene `_id: false`: las alertas se identifican
+    // por timestamp (la UI manda `alert._id ?? alert.timestamp`).
+    const isObjectId = /^[a-f0-9]{24}$/i.test(alertId);
+    const ts = isObjectId ? null : new Date(alertId);
+    if (!isObjectId && Number.isNaN(ts.getTime())) {
+      return res.status(400).json({ success: false, message: 'alertId inválido' });
+    }
+    const match = isObjectId ? { 'alerts._id': alertId } : { 'alerts.timestamp': ts };
     const result = await ManagerConfigEje.updateOne(
-      { name: 'eje-manager', 'alerts._id': alertId },
+      { name: 'eje-manager', ...match },
       {
         $set: {
           'alerts.$.acknowledged': true,
