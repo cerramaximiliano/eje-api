@@ -38,7 +38,7 @@ router.get('/manager/history', verifyToken, verifyAdmin, controller.getManagerHi
 router.get('/manager/alerts', verifyToken, verifyAdmin, controller.getAlerts);
 
 // Acknowledge alert (Admin only)
-router.post('/manager/alerts/:index/acknowledge', verifyToken, verifyAdmin, controller.acknowledgeAlert);
+router.post('/manager/alerts/:alertId/acknowledge', verifyToken, verifyAdmin, controller.acknowledgeAlert);
 
 // Get daily stats (Admin only)
 router.get('/manager/daily-stats', verifyToken, verifyAdmin, controller.getDailyStats);

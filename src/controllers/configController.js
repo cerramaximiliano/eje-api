@@ -365,12 +365,27 @@ const getAlerts = async (req, res) => {
  */
 const acknowledgeAlert = async (req, res) => {
   try {
-    const index = parseInt(req.params.index, 10);
+    const { alertId } = req.params;
     const acknowledgedBy = req.userData?.email || req.userId || 'admin';
 
-    await ManagerConfigEje.acknowledgeAlert(index, acknowledgedBy);
+    // Acknowledge por _id del subdocumento (robusto ante reordenamiento del
+    // array de alertas; el índice de posición driftea al filtrar/paginar).
+    const result = await ManagerConfigEje.updateOne(
+      { name: 'eje-manager', 'alerts._id': alertId },
+      {
+        $set: {
+          'alerts.$.acknowledged': true,
+          'alerts.$.acknowledgedAt': new Date(),
+          'alerts.$.acknowledgedBy': acknowledgedBy
+        }
+      }
+    );
 
-    logger.info({ index, acknowledgedBy }, 'Alert acknowledged');
+    if (!result.matchedCount) {
+      return res.status(404).json({ success: false, message: 'Alert no encontrada' });
+    }
+
+    logger.info({ alertId, acknowledgedBy }, 'Alert acknowledged');
 
     return res.json({
       success: true,
