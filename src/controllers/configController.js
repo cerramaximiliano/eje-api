@@ -643,7 +643,8 @@ const updateWorkerConfig = async (req, res) => {
       'cronExpression',
       'workerName',
       'workerScript',
-      'maxMemoryRestart'
+      'maxMemoryRestart',
+      'engine' // auto | api | scraper (motor de datos del worker)
     ];
 
     // Schedule fields (nested)
