@@ -8,7 +8,9 @@ const { logger } = require('../config/pino');
 const associateFolder = async (req, res) => {
   try {
     const { causaId, cuij, numero, anio, folderId, searchTerm } = req.body;
-    const userId = req.userId;
+    // E6: con auth por api-key req.userId es undefined → userCausaIds vacío y sin
+    // notificaciones; el hub manda userId en el body como respaldo.
+    const userId = req.userId || req.body.userId;
 
     if (!folderId) {
       return res.status(400).json({
