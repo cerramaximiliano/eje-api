@@ -636,7 +636,8 @@ const updateWorkerConfig = async (req, res) => {
       'maxWorkers',
       'scaleUpThreshold',
       'scaleDownThreshold',
-      'updateThresholdHours',
+      // 'updateThresholdHours' NO: el umbral es global (config.updateThresholdHours),
+      // se edita por PATCH /config/manager/settings. Ver docs del ajuste 2026-08-28.
       'batchSize',
       'delayBetweenRequests',
       'maxRetries',
