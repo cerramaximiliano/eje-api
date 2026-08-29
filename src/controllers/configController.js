@@ -363,6 +363,24 @@ const getAlerts = async (req, res) => {
  * Acknowledge alert
  * POST /config/manager/alerts/:index/acknowledge
  */
+// POST /config/manager/alerts/acknowledge-all — confirma en bloque.
+// Body opcional: { olderThanHours } para limpiar solo lo viejo.
+const acknowledgeAllAlerts = async (req, res) => {
+  try {
+    const acknowledgedBy = req.userData?.email || req.userId || 'admin';
+    const raw = req.body?.olderThanHours;
+    const olderThanHours = raw === undefined || raw === null || raw === '' ? undefined : Number(raw);
+    if (olderThanHours !== undefined && (!Number.isFinite(olderThanHours) || olderThanHours < 0)) {
+      return res.status(400).json({ success: false, message: 'olderThanHours inválido' });
+    }
+    const acknowledged = await ManagerConfigEje.acknowledgeAllAlerts(acknowledgedBy, { olderThanHours });
+    return res.json({ success: true, data: { acknowledged, acknowledgedBy, olderThanHours: olderThanHours ?? null } });
+  } catch (error) {
+    logger.error({ error: error.message }, 'Error acknowledging all alerts');
+    return res.status(500).json({ success: false, message: 'Error acknowledging all alerts', error: error.message });
+  }
+};
+
 const acknowledgeAlert = async (req, res) => {
   try {
     const { alertId } = req.params;
@@ -899,6 +917,7 @@ module.exports = {
   getManagerHistory,
   getAlerts,
   acknowledgeAlert,
+  acknowledgeAllAlerts,
   getDailyStats,
   // Worker stats
   getWorkerStats,

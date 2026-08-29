@@ -38,6 +38,9 @@ router.get('/manager/history', verifyToken, verifyAdmin, controller.getManagerHi
 router.get('/manager/alerts', verifyToken, verifyAdmin, controller.getAlerts);
 
 // Acknowledge alert (Admin only)
+// Acknowledge all alerts (Admin only) — debe ir ANTES de /:alertId/acknowledge
+router.post('/manager/alerts/acknowledge-all', verifyToken, verifyAdmin, controller.acknowledgeAllAlerts);
+
 router.post('/manager/alerts/:alertId/acknowledge', verifyToken, verifyAdmin, controller.acknowledgeAlert);
 
 // Get daily stats (Admin only)
