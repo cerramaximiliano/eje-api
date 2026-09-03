@@ -235,10 +235,16 @@ async function startServer() {
     // materialización en disco. Path absoluto (no CWD) para no depender de
     // desde dónde se lance el proceso.
     if (NODE_ENV !== 'development' || !process.env.URLDB) {
+      const envPath = path.resolve(__dirname, '../.env');
       const secrets = await retrieveSecrets();
       if (secrets) {
-        await fsPromises.writeFile(path.resolve(__dirname, '../.env'), secrets, { mode: 0o600 });
-        require('dotenv').config({ override: true, path: path.resolve(__dirname, '../.env') });
+        await fsPromises.writeFile(envPath, secrets, { mode: 0o600 });
+        // El `mode` de writeFile solo aplica al CREAR el archivo: si el .env ya
+        // existia conserva sus permisos viejos. Sin este chmod explicito el
+        // archivo queda 664 y los ~120 secretos del ecosistema son legibles por
+        // cualquier usuario del box.
+        await fsPromises.chmod(envPath, 0o600);
+        require('dotenv').config({ override: true, path: envPath });
       }
     }
 
