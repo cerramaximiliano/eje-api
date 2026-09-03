@@ -22,6 +22,20 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const PORT = process.env.PORT || 3004;
 
 /**
+ * Construye el error de rechazo CORS marcado para que el error handler lo
+ * loguee como WARN (no ERROR) y responda 403. La enorme mayoria de estos
+ * rechazos son bots escaneando /wp-json, /blog, etc. — no fallas del servicio,
+ * y como ERROR inflaban el ratio de error del monitoreo.
+ */
+function corsRejection(origin) {
+  const err = new Error('Not allowed by CORS');
+  err.status = 403;
+  err.isCorsRejection = true;
+  err.origin = origin;
+  return err;
+}
+
+/**
  * Configure CORS
  */
 function configureCors() {
@@ -41,7 +55,7 @@ function configureCors() {
       if (allowedOrigins.includes(origin) || NODE_ENV === 'development') {
         callback(null, true);
       } else {
-        callback(new Error('Not allowed by CORS'));
+        callback(corsRejection(origin));
       }
     },
     credentials: true,
@@ -128,6 +142,10 @@ function configureRoutes() {
   });
 
   app.use((err, req, res, next) => {
+    if (err.isCorsRejection) {
+      logger.warn('CORS rechazado en ' + req.method + ' ' + req.path + ' (origin: ' + (err.origin || '-') + ')');
+      return res.status(403).json({ success: false, message: 'Not allowed by CORS' });
+    }
     logger.error('Error on ' + req.method + ' ' + req.path + ': ' + err.message);
     res.status(err.status || 500).json({
       success: false,
