@@ -124,7 +124,12 @@ const verifyApiKey = (req, res, next) => {
       });
     }
 
-    if (apiKey !== process.env.API_KEY) {
+    // Fail-closed: si `EJE_API_KEY` no está en el secreto, la rama M2M queda
+    // deshabilitada por completo. No hay key por defecto — un secreto
+    // hardcodeado en el repo no es un secreto.
+    const expected = process.env.EJE_API_KEY;
+
+    if (!expected || apiKey !== expected) {
       return res.status(401).json({
         success: false,
         message: 'Invalid API key'
@@ -149,9 +154,10 @@ const verifyApiKey = (req, res, next) => {
  */
 const verifyTokenOrApiKey = (req, res, next) => {
   // Check for API key first
+  const expected = process.env.EJE_API_KEY;
   const apiKey = req.headers['x-api-key'] || req.headers['api-key'] || req.query.apiKey || req.body?.apiKey;
 
-  if (apiKey && apiKey === process.env.API_KEY) {
+  if (expected && apiKey && apiKey === expected) {
     logger.debug('Authenticated via API key on ' + req.method + ' ' + req.path);
     return next();
   }

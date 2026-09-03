@@ -1,5 +1,7 @@
 require('dotenv').config();
 
+const fsPromises = require('fs/promises');
+const path = require('path');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -8,7 +10,7 @@ const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 
 const { logger, cleanLogs, printStartupBanner } = require('./config/pino');
-const { loadSecrets } = require('./config/env');
+const { retrieveSecrets } = require('./config/env');
 const routes = require('./routes');
 
 const app = express();
@@ -228,9 +230,16 @@ function startListening(retries = 5, delay = 2000) {
  */
 async function startServer() {
   try {
-    // Cargar secretos si es necesario
+    // Cargar secretos desde AWS y volcarlos al .env, igual que
+    // law-analytics-server: AWS es la fuente de verdad, el .env es solo su
+    // materialización en disco. Path absoluto (no CWD) para no depender de
+    // desde dónde se lance el proceso.
     if (NODE_ENV !== 'development' || !process.env.URLDB) {
-      await loadSecrets();
+      const secrets = await retrieveSecrets();
+      if (secrets) {
+        await fsPromises.writeFile(path.resolve(__dirname, '../.env'), secrets, { mode: 0o600 });
+        require('dotenv').config({ override: true, path: path.resolve(__dirname, '../.env') });
+      }
     }
 
     // Conectar a MongoDB
